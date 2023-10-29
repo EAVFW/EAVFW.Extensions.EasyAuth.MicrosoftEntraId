@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net6.0</TargetFrameworks>
+
+    <Title>EAVFW.Extensions.EasyAuth.MicrosoftEntraId</Title>
+    <Authors>Poul Kjeldager</Authors>
+    <Description>EAVFW.Extensions.EasyAuth.MicrosoftEntraId</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/EAVFW/EAVFW.Extensions.EasyAuth.MicrosoftEntraId</RepositoryUrl>
+    <RemoteEAVFramework>$(UseEAVFromNuget)</RemoteEAVFramework>
+  </PropertyGroup>
+  
+  <ItemGroup Condition="$(RemoteEAVFramework) != 'false'">
+      <ProjectReference Include="$(LocalEAVFrameworkPath)\src\EAVFramework.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="$(RemoteEAVFramework) == 'false'">
+    <PackageReference Include="EAVFramework" Version="$(EAVFrameworkVersion)" />
+  </ItemGroup>
+
+
+  
+
+  <ItemGroup>
+    <PackageReference Include="IdentityModel" Version="6.2.0" />
+  </ItemGroup>
+</Project>
