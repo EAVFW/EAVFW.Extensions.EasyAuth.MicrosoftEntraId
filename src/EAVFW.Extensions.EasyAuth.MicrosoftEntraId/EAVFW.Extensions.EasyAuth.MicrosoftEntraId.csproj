@@ -10,13 +10,13 @@
     <RepositoryUrl>https://github.com/EAVFW/EAVFW.Extensions.EasyAuth.MicrosoftEntraId</RepositoryUrl>
     <RemoteEAVFramework>$(UseEAVFromNuget)</RemoteEAVFramework>
   </PropertyGroup>
-  
-  <ItemGroup Condition="$(RemoteEAVFramework) != 'false'">
-      <ProjectReference Include="$(LocalEAVFrameworkPath)\src\EAVFramework.csproj" />
-  </ItemGroup>
-  <ItemGroup Condition="$(RemoteEAVFramework) == 'false'">
-    <PackageReference Include="EAVFramework" Version="$(EAVFrameworkVersion)" />
-  </ItemGroup>
+
+    <ItemGroup Condition="$(UseEAVFromNuget) == 'false'">
+        <ProjectReference Include="$(LocalEAVFrameworkPath)\src\EAVFramework.csproj" />
+    </ItemGroup>
+    <ItemGroup Condition="$(UseEAVFromNuget) != 'false'">
+        <PackageReference Include="EAVFramework" Version="$(EAVFrameworkVersion)" />
+    </ItemGroup>
 
 
   
