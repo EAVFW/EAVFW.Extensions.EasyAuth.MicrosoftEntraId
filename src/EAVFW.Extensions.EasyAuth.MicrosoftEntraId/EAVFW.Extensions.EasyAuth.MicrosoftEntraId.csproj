@@ -18,9 +18,13 @@
         <PackageReference Include="EAVFramework" Version="$(EAVFrameworkVersion)" />
     </ItemGroup>
 
-
+    <ItemGroup Condition="$(UseEAVFromNuget) == 'false'">
+        <ProjectReference Include="$(LocalEAVFrameworkPath)\src\EAVFramework.csproj" />
+    </ItemGroup>
+    <ItemGroup Condition="$(UseEAVFromNuget) != 'false'">
+        <PackageReference Include="EAVFramework" Version="$(EAVFrameworkVersion)" />
+    </ItemGroup>
   
-
   <ItemGroup>
     <PackageReference Include="IdentityModel" Version="6.2.0" />
   </ItemGroup>

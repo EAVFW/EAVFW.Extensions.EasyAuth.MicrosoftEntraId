@@ -1,0 +1,33 @@
+
+on:
+  pull_request:
+    types: [ assigned, opened, synchronize, reopened ]
+  push:
+    branches:
+      - 'feature/**'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    name: Building
+    steps:
+      - name: Checkout code base
+        uses: actions/checkout@v2
+
+      - uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Cleaning
+        run: dotnet clean
+
+      - name: Build solution
+        run: dotnet build -c Release
+
+      #- name: Archive build to artifacts
+      #  uses: actions/upload-artifact@v2
+      #  with:
+      #    name: build
+      #    path: |
+      #      build/*
+      #    retention-days: 5
