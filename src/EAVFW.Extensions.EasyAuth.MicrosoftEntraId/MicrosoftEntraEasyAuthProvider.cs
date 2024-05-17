@@ -48,14 +48,16 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
         {
             var email = httpcontext.Request.Query["email"].FirstOrDefault();
             var redirectUri = httpcontext.Request.Query["redirectUri"].FirstOrDefault();
-            
-            var ru = new RequestUrl(_options.Value.AuthorizationUrl);
+            var callbackUri = $"{httpcontext.Request.Scheme}://{httpcontext.Request.Host}{httpcontext.Request.Path}/callback";
+
+            var ru = new RequestUrl(_options.Value.GetMicrosoftAuthorizationUrl(httpcontext));
             var authUri = ru.CreateAuthorizeUrl(
               clientId: _options.Value.ClientId,
-              redirectUri: _options.Value.RedirectUrl,
+              redirectUri: callbackUri,
               responseType: ResponseTypes.Code,
               responseMode: ResponseModes.FormPost,
               scope: _options.Value.Scope,
+              loginHint: String.IsNullOrEmpty(email) || email == "undefined" ? null : email,
               state: handleId + "&" + redirectUri);
             httpcontext.Response.Redirect(authUri);
         }
@@ -66,25 +68,22 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
             var state = m.State.Split(new char[] { '&' }, 2);
             var handleId = state[0];
             var redirectUri = state[1];
+            var callbackUri = $"{httpcontext.Request.Scheme}://{httpcontext.Request.Host}{httpcontext.Request.Path}";
+
             var http = _clientFactory.CreateClient();
             var response = await http.RequestAuthorizationCodeTokenAsync(new AuthorizationCodeTokenRequest
             {
-                Address = _options.Value.TokenEndpoint,
+                Address = _options.Value.GetMicrosoftTokenEndpoint(httpcontext),
                 ClientId = _options.Value.ClientId,
                 ClientSecret = _options.Value.ClientSecret,
                 Code = m.Code,
-                RedirectUri = _options.Value.RedirectUrl,
+                RedirectUri = callbackUri,
             });
 
-            var handler = new JwtSecurityTokenHandler(); 
-            var jwtSecurityToken = handler.ReadJwtToken(response.IdentityToken);
-            var jti = jwtSecurityToken.Claims.First(claim => claim.Type == "email").Value;
-
             ClaimsPrincipal identity = await _options.Value.ValidateUserAsync(httpcontext, handleId, response);
-
             if (identity == null)
             {
-                httpcontext.Response.Redirect("error=access_denied&error_subcode=user_not_found");
+                httpcontext.Response.Redirect($"{httpcontext.Request.Scheme}://{httpcontext.Request.Host}callback?error=access_denied&error_subcode=user_not_found");
                 //return;
             }
             return await Task.FromResult((new ClaimsPrincipal(identity), redirectUri, handleId));
