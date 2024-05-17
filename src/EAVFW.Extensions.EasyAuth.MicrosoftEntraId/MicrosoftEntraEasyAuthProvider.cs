@@ -57,7 +57,7 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
               responseType: ResponseTypes.Code,
               responseMode: ResponseModes.FormPost,
               scope: _options.Value.Scope,
-              loginHint: email,
+              loginHint: String.IsNullOrEmpty(email) || email == "undefined" ? null : email,
               state: handleId + "&" + redirectUri);
             httpcontext.Response.Redirect(authUri);
         }
@@ -68,15 +68,16 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
             var state = m.State.Split(new char[] { '&' }, 2);
             var handleId = state[0];
             var redirectUri = state[1];
+            var callbackUri = $"{httpcontext.Request.Scheme}://{httpcontext.Request.Host}{httpcontext.Request.Path}";
+
             var http = _clientFactory.CreateClient();
-            var a = _options.Value.GetMicrosoftTokenEndpoint(httpcontext);
             var response = await http.RequestAuthorizationCodeTokenAsync(new AuthorizationCodeTokenRequest
             {
                 Address = _options.Value.GetMicrosoftTokenEndpoint(httpcontext),
                 ClientId = _options.Value.ClientId,
                 ClientSecret = _options.Value.ClientSecret,
                 Code = m.Code,
-                RedirectUri = redirectUri,
+                RedirectUri = callbackUri,
             });
 
             ClaimsPrincipal identity = await _options.Value.ValidateUserAsync(httpcontext, handleId, response);
