@@ -12,12 +12,14 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
 {
     public static class MicrosoftEntraIdEasyAuthExtensions
     {
-        public static AuthenticatedEAVFrameworkBuilder AddMicrosoftEntraIdEasyAuth(this AuthenticatedEAVFrameworkBuilder builder, Func<HttpContext, string, TokenResponse, Task<ClaimsPrincipal>> validateUserAsync)
+        public static AuthenticatedEAVFrameworkBuilder AddMicrosoftEntraIdEasyAuth(this AuthenticatedEAVFrameworkBuilder builder, Func<HttpContext, string, TokenResponse, Task<ClaimsPrincipal>> validateUserAsync, Func<HttpContext, string> getMicrosoftAuthorizationUrl, Func<HttpContext, string> getMicrosoftTokenEndpoint)
         {
             builder.AddAuthenticationProvider<MicrosoftEntraEasyAuthProvider, MicrosoftEntraIdEasyAuthOptions,IConfiguration>((options, config) =>
             { 
                 config.GetSection("EAVEasyAuth:MicrosoftEntraId").Bind(options);
                 options.ValidateUserAsync = validateUserAsync;
+                options.GetMicrosoftAuthorizationUrl = getMicrosoftAuthorizationUrl;
+                options.GetMicrosoftTokenEndpoint = getMicrosoftTokenEndpoint;
 
             });
             return builder;
