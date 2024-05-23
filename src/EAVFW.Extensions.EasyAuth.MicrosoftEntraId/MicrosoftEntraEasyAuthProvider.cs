@@ -1,5 +1,8 @@
+using EAVFramework;
 using EAVFramework.Authentication;
+using EAVFramework.Endpoints;
 using EAVFramework.Extensions;
+using EAVFW.Extensions.SecurityModel;
 using IdentityModel;
 using IdentityModel.Client;
 using Microsoft.AspNetCore.Http;
@@ -25,10 +28,13 @@ using static System.Net.WebRequestMethods;
 namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
 {
 
-    public class MicrosoftEntraEasyAuthProvider : IEasyAuthProvider
+    public class MicrosoftEntraEasyAuthProvider<TSecurityGroup,TSecurityGroupMember> : IEasyAuthProvider
+        where TSecurityGroup : DynamicEntity, IEntraIDSecurityGroup
+        where TSecurityGroupMember : DynamicEntity, ISecurityGroupMember
     {
         private readonly IOptions<MicrosoftEntraIdEasyAuthOptions> _options;
         private readonly IHttpClientFactory _clientFactory;
+        private readonly EAVDBContext<DynamicContext> _db;
 
         public string AuthenticationName => "MicrosoftEntraId";
 
@@ -38,10 +44,12 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
 
         public MicrosoftEntraEasyAuthProvider() { }
 
-        public MicrosoftEntraEasyAuthProvider(IOptions<MicrosoftEntraIdEasyAuthOptions> options, IHttpClientFactory clientFactory)
+        public MicrosoftEntraEasyAuthProvider(IOptions<MicrosoftEntraIdEasyAuthOptions> options,
+            IHttpClientFactory clientFactory, EAVDBContext<DynamicContext> db)
         {
             _options = options ?? throw new System.ArgumentNullException(nameof(options));
             _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
+            _db = db;
         }
 
         public async Task OnAuthenticate(HttpContext httpcontext, string handleId, string redirectUrl)
@@ -86,6 +94,27 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
                 httpcontext.Response.Redirect($"{httpcontext.Request.Scheme}://{httpcontext.Request.Host}callback?error=access_denied&error_subcode=user_not_found");
                 //return;
             }
+
+            var handler = new JwtSecurityTokenHandler();
+            var jwtSecurityToken = handler.ReadJwtToken(response.IdentityToken);
+
+            var groupId = jwtSecurityToken.Claims.First(claim => claim.Type == "groups").Value;
+
+            var groupids = new string[] { "", "" };
+
+            var sgs = _db.Set<TSecurityGroup>();
+            var assignments = _db.Set<TSecurityGroupMember>();
+
+
+            //Add securityMember for the group ids where found
+
+
+            //Remove securirymember from existing that was not given in groupids.
+           
+
+
+
+
             return await Task.FromResult((new ClaimsPrincipal(identity), redirectUri, handleId));
         }
 
