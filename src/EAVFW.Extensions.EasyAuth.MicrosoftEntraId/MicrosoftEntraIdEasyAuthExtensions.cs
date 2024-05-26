@@ -17,14 +17,15 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
     {
 
     }
+
     public static class MicrosoftEntraIdEasyAuthExtensions
     {
-        public static AuthenticatedEAVFrameworkBuilder AddMicrosoftEntraIdEasyAuth<TSecurityGroup,TSecurityGroupMemeber>(
+        public static AuthenticatedEAVFrameworkBuilder AddMicrosoftEntraIdEasyAuth<TSecurityGroup, TSecurityGroupMemeber>(
             this AuthenticatedEAVFrameworkBuilder builder,
             Func<HttpContext, string, TokenResponse, Task<ClaimsPrincipal>> validateUserAsync,
             Func<HttpContext, string> getMicrosoftAuthorizationUrl, Func<HttpContext, string> getMicrosoftTokenEndpoint)
             where TSecurityGroup : DynamicEntity, IEntraIDSecurityGroup
-            where TSecurityGroupMemeber : DynamicEntity, ISecurityGroupMember
+            where TSecurityGroupMemeber : DynamicEntity, ISecurityGroupMember, new()
         {
             builder.AddAuthenticationProvider<MicrosoftEntraEasyAuthProvider<TSecurityGroup,TSecurityGroupMemeber>, MicrosoftEntraIdEasyAuthOptions,IConfiguration>((options, config) =>
             { 

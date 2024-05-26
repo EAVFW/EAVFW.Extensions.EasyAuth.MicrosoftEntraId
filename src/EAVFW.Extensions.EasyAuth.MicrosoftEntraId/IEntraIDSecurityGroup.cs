@@ -8,9 +8,7 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
     [EntityInterface(EntityKey = "Security Group")]
     public interface IEntraIDSecurityGroup
     {
-       
+        public Guid Id { get; set; }
         public Guid? EntraIdGroupId { get; set; }
     }
-
-    
 }
