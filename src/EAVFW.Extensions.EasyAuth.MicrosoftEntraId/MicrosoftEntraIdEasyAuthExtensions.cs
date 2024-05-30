@@ -1,4 +1,6 @@
+using EAVFramework;
 using EAVFramework.Configuration;
+using EAVFW.Extensions.SecurityModel;
 using IdentityModel.Client;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -10,11 +12,22 @@ using System.Threading.Tasks;
 
 namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
 {
+    public class GroupMatcherService<TSecurityGroup>
+        where TSecurityGroup : DynamicEntity, IEntraIDSecurityGroup
+    {
+
+    }
+
     public static class MicrosoftEntraIdEasyAuthExtensions
     {
-        public static AuthenticatedEAVFrameworkBuilder AddMicrosoftEntraIdEasyAuth(this AuthenticatedEAVFrameworkBuilder builder, Func<HttpContext, string, TokenResponse, Task<ClaimsPrincipal>> validateUserAsync, Func<HttpContext, string> getMicrosoftAuthorizationUrl, Func<HttpContext, string> getMicrosoftTokenEndpoint)
+        public static AuthenticatedEAVFrameworkBuilder AddMicrosoftEntraIdEasyAuth<TSecurityGroup, TSecurityGroupMemeber>(
+            this AuthenticatedEAVFrameworkBuilder builder,
+            Func<HttpContext, string, TokenResponse, Task<ClaimsPrincipal>> validateUserAsync,
+            Func<HttpContext, string> getMicrosoftAuthorizationUrl, Func<HttpContext, string> getMicrosoftTokenEndpoint)
+            where TSecurityGroup : DynamicEntity, IEntraIDSecurityGroup
+            where TSecurityGroupMemeber : DynamicEntity, ISecurityGroupMember, new()
         {
-            builder.AddAuthenticationProvider<MicrosoftEntraEasyAuthProvider, MicrosoftEntraIdEasyAuthOptions,IConfiguration>((options, config) =>
+            builder.AddAuthenticationProvider<MicrosoftEntraEasyAuthProvider<TSecurityGroup,TSecurityGroupMemeber>, MicrosoftEntraIdEasyAuthOptions,IConfiguration>((options, config) =>
             { 
                 config.GetSection("EAVEasyAuth:MicrosoftEntraId").Bind(options);
                 options.ValidateUserAsync = validateUserAsync;
@@ -22,6 +35,8 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
                 options.GetMicrosoftTokenEndpoint = getMicrosoftTokenEndpoint;
 
             });
+            builder.Services.AddScoped<GroupMatcherService<TSecurityGroup>>();
+
             return builder;
         }
     }

@@ -17,12 +17,13 @@
     <ItemGroup Condition="$(UseEAVFromNuget) != 'false'">
         <PackageReference Include="EAVFramework" Version="$(EAVFrameworkVersion)" />
     </ItemGroup>
-  
+
   <ItemGroup>
 		<None Include="..\..\README.md" Link="README.md" Pack="true" PackagePath="\" />
 	</ItemGroup>
   
   <ItemGroup>
+    <PackageReference Include="EAVFW.Extensions.SecurityModel" Version="2.0.3" />
     <PackageReference Include="IdentityModel" Version="6.2.0" />
   </ItemGroup>
 </Project>
