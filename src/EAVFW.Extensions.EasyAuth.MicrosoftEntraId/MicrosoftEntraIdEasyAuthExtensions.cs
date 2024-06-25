@@ -18,6 +18,7 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
     {
 
     }
+
     public static class MicrosoftEntraIdEasyAuthExtensions
     {
       
@@ -27,7 +28,7 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
             Func<HttpContext, string, TokenResponse, Task<ClaimsPrincipal>> validateUserAsync,
             Func<HttpContext, string> getMicrosoftAuthorizationUrl , Func<HttpContext, string> getMicrosoftTokenEndpoint)
             where TSecurityGroup : DynamicEntity, IEntraIDSecurityGroup
-            where TSecurityGroupMemeber : DynamicEntity, ISecurityGroupMember
+            where TSecurityGroupMemeber : DynamicEntity, ISecurityGroupMember, new()
         {
             builder.AddAuthenticationProvider<MicrosoftEntraEasyAuthProvider<TSecurityGroup,TSecurityGroupMemeber>, MicrosoftEntraIdEasyAuthOptions,IConfiguration>((options, config) =>
             { 
@@ -46,7 +47,7 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
            this AuthenticatedEAVFrameworkBuilder builder,
            Func<HttpContext, string, TokenResponse, Task<ClaimsPrincipal>> validateUserAsync)
            where TSecurityGroup : DynamicEntity, IEntraIDSecurityGroup
-           where TSecurityGroupMemeber : DynamicEntity, ISecurityGroupMember
+           where TSecurityGroupMemeber : DynamicEntity, ISecurityGroupMember,new()
         {
             builder.AddAuthenticationProvider<MicrosoftEntraEasyAuthProvider<TSecurityGroup, TSecurityGroupMemeber>, MicrosoftEntraIdEasyAuthOptions, IConfiguration>((options, config) =>
             {
