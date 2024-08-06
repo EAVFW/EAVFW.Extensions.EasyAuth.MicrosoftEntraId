@@ -12,9 +12,9 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
     {
         public string ClientId { get;  set; }
         public string ClientSecret { get;  set; }
-        public string TenantId { get;  set; }
+        public string TenantId { get;  set; }= "common";
         public string GroupId { get;  set; }
-        public string Scope { get;  set; }
+        public string Scope { get; set; } = "openid email";
 
         public Func<HttpContext, string> GetMicrosoftAuthorizationUrl { get; set; } = DefaultGetMicrosoftAuthorizationUrl;
         public Func<HttpContext, string> GetMicrosoftTokenEndpoint { get; set; } = DefaultGetMicrosoftTokenEndpoint;
