@@ -18,7 +18,7 @@
     </ItemGroup>
     <ItemGroup Condition="$(UseEAVFromNuget) != 'false'">
         <PackageReference Include="EAVFramework" Version="$(EAVFrameworkVersion)" />
-        <PackageReference Include="EAVFW.Extensions.SecurityModel" Version="2.1.0" />
+        <PackageReference Include="EAVFW.Extensions.SecurityModel" Version="2.2.0" />
     </ItemGroup>
 
   <ItemGroup>
@@ -28,5 +28,7 @@
   <ItemGroup>
 
     <PackageReference Include="IdentityModel" Version="7.0.0" />
+
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.0.1" />
   </ItemGroup>
 </Project>

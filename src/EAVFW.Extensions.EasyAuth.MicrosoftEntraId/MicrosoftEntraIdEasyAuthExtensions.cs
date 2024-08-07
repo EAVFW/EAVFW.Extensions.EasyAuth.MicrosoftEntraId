@@ -1,5 +1,6 @@
 using EAVFramework;
 using EAVFramework.Configuration;
+using EAVFramework.Extensions;
 using EAVFW.Extensions.SecurityModel;
 using IdentityModel.Client;
 using Microsoft.AspNetCore.Builder;
@@ -8,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using System;
+using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
 
@@ -23,17 +25,20 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
     {
       
 
-        public static AuthenticatedEAVFrameworkBuilder AddMicrosoftEntraIdEasyAuth<TSecurityGroup,TSecurityGroupMemeber>(
+        public static AuthenticatedEAVFrameworkBuilder AddMicrosoftEntraIdEasyAuth<TContext,TIdentity,TSecurityGroup,TSecurityGroupMemeber>(
             this AuthenticatedEAVFrameworkBuilder builder,
-            Func<HttpContext, string, TokenResponse, Task<ClaimsPrincipal>> validateUserAsync,
+            Func<OnCallbackRequest, IEnumerable<Claim>, Task<Guid>> findIdentityAsync,
             Func<HttpContext, string> getMicrosoftAuthorizationUrl , Func<HttpContext, string> getMicrosoftTokenEndpoint)
+            where TContext : DynamicContext
+            where TIdentity: DynamicEntity,IIdentity
             where TSecurityGroup : DynamicEntity, IEntraIDSecurityGroup
             where TSecurityGroupMemeber : DynamicEntity, ISecurityGroupMember, new()
         {
-            builder.AddAuthenticationProvider<MicrosoftEntraEasyAuthProvider<TSecurityGroup,TSecurityGroupMemeber>, MicrosoftEntraIdEasyAuthOptions,IConfiguration>((options, config) =>
+            builder.AddAuthenticationProvider<MicrosoftEntraEasyAuthProvider<TContext,TSecurityGroup,TSecurityGroupMemeber,TIdentity>,
+                MicrosoftEntraIdEasyAuthOptions,IConfiguration>((options, config) =>
             { 
                 config.GetSection("EAVEasyAuth:MicrosoftEntraId").Bind(options);
-                options.ValidateUserAsync = validateUserAsync;
+                options.FindIdentityAsync = findIdentityAsync;
                 options.GetMicrosoftAuthorizationUrl = getMicrosoftAuthorizationUrl;
                 options.GetMicrosoftTokenEndpoint = getMicrosoftTokenEndpoint;
 
@@ -43,16 +48,18 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
             return builder;
         }
 
-        public static AuthenticatedEAVFrameworkBuilder AddMicrosoftEntraIdEasyAuth<TSecurityGroup, TSecurityGroupMemeber>(
+        public static AuthenticatedEAVFrameworkBuilder AddMicrosoftEntraIdEasyAuth<TContext, TIdentity, TSecurityGroup, TSecurityGroupMemeber>(
            this AuthenticatedEAVFrameworkBuilder builder,
-           Func<HttpContext, string, TokenResponse, Task<ClaimsPrincipal>> validateUserAsync)
+           Func<OnCallbackRequest, IEnumerable<Claim>, Task<Guid>> findIdentityAsync)
+              where TContext : DynamicContext
+            where TIdentity : DynamicEntity, IIdentity
            where TSecurityGroup : DynamicEntity, IEntraIDSecurityGroup
            where TSecurityGroupMemeber : DynamicEntity, ISecurityGroupMember,new()
         {
-            builder.AddAuthenticationProvider<MicrosoftEntraEasyAuthProvider<TSecurityGroup, TSecurityGroupMemeber>, MicrosoftEntraIdEasyAuthOptions, IConfiguration>((options, config) =>
+            builder.AddAuthenticationProvider<MicrosoftEntraEasyAuthProvider<TContext,TSecurityGroup, TSecurityGroupMemeber, TIdentity>, MicrosoftEntraIdEasyAuthOptions, IConfiguration>((options, config) =>
             {
                 config.GetSection("EAVEasyAuth:MicrosoftEntraId").Bind(options);
-                options.ValidateUserAsync = validateUserAsync; 
+                options.FindIdentityAsync = findIdentityAsync; 
             });
             builder.Services.AddScoped<GroupMatcherService<TSecurityGroup>>();
 

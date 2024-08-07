@@ -1,14 +1,22 @@
 using EAVFramework;
 using EAVFramework.Authentication;
+using EAVFramework.Authentication.Passwordless;
+using EAVFramework.Configuration;
 using EAVFramework.Endpoints;
+using EAVFramework.Extensions;
 using EAVFW.Extensions.SecurityModel;
 using IdentityModel.Client;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Primitives;
+using Microsoft.IdentityModel.JsonWebTokens;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IdentityModel.Tokens.Jwt;
 using System.IO;
 using System.Linq;
@@ -20,99 +28,148 @@ using static IdentityModel.OidcConstants;
 namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
 {
 
-    public class MicrosoftEntraEasyAuthProvider<TSecurityGroup, TSecurityGroupMember> : IEasyAuthProvider
+    public class MicrosoftEntraEasyAuthProvider<TContext,TSecurityGroup, TSecurityGroupMember,TIdentity> : DefaultAuthProvider
+        where TContext : DynamicContext
         where TSecurityGroup : DynamicEntity, IEntraIDSecurityGroup
         where TSecurityGroupMember : DynamicEntity, ISecurityGroupMember, new()
+        where TIdentity : DynamicEntity, IIdentity
     {
         private readonly IOptions<MicrosoftEntraIdEasyAuthOptions> _options;
         private readonly IHttpClientFactory _clientFactory;
+          
 
-        public string AuthenticationName => "MicrosoftEntraId";
-
-        public HttpMethod CallbackHttpMethod => HttpMethod.Post;
-
-        public bool AutoGenerateRoutes { get; set; } = true;
-
-        public MicrosoftEntraEasyAuthProvider() { }
+        public MicrosoftEntraEasyAuthProvider() :base("MicrosoftEntraId", HttpMethod.Post) { }
 
         public MicrosoftEntraEasyAuthProvider(
             IOptions<MicrosoftEntraIdEasyAuthOptions> options,
-            IHttpClientFactory clientFactory)
+            IHttpClientFactory clientFactory) : this()
         {
             _options = options ?? throw new System.ArgumentNullException(nameof(options));
             _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
         }
 
-        public async Task OnAuthenticate(HttpContext httpcontext, string handleId, string redirectUrl)
+        public override async Task<OnAuthenticateResult> OnAuthenticate(OnAuthenticateRequest authenticateRequest)
         {
-            var email = httpcontext.Request.Query["email"].FirstOrDefault();
-            var redirectUri = httpcontext.Request.Query["redirectUri"].FirstOrDefault();
-            var callbackUri = $"{httpcontext.Request.Scheme}://{httpcontext.Request.Host}{httpcontext.Request.Path}/callback";
+            
 
-            var ru = new RequestUrl(_options.Value.GetMicrosoftAuthorizationUrl(httpcontext));
+            var callbackurl = new Uri(authenticateRequest.CallbackUrl);
+           
+            var ru = new RequestUrl(_options.Value.GetMicrosoftAuthorizationUrl(authenticateRequest.HttpContext));
             var authUri = ru.CreateAuthorizeUrl(
               clientId: _options.Value.ClientId,
-              redirectUri: callbackUri,
+              redirectUri: callbackurl.GetLeftPart(UriPartial.Path),
               responseType: ResponseTypes.Code,
               responseMode: ResponseModes.FormPost,
               scope: _options.Value.Scope,
-              loginHint: String.IsNullOrEmpty(email) || email == "undefined" ? null : email,
-              state: handleId + "&" + redirectUri);
-            httpcontext.Response.Redirect(authUri);
+              loginHint: authenticateRequest.IdentityId.HasValue ?
+               await authenticateRequest.Options.FindEmailFromIdentity(
+                   new EmailDiscoveryRequest
+                   {
+                       HttpContext = authenticateRequest.HttpContext,
+                       IdentityId = authenticateRequest.IdentityId.Value,
+                       ServiceProvider = authenticateRequest.ServiceProvider
+                   }):null,
+        state: callbackurl.GetLeftPart(UriPartial.Path));
+         
+            authenticateRequest.HttpContext.Response.Redirect(authUri);
+
+            return new OnAuthenticateResult { Success = true };
         }
 
-        public async Task<(ClaimsPrincipal, string, string)> OnCallback(HttpContext httpcontext)
+        private async Task<ClaimsPrincipal> ValidateMicrosoftEntraIdUser(OnCallbackRequest request, Guid handleid, JsonWebToken jwtSecurityToken)
         {
-            var m = new IdentityModel.Client.AuthorizeResponse(await new StreamReader(httpcontext.Request.Body).ReadToEndAsync());
-            var state = m.State.Split(new char[] { '&' }, 2);
-            var handleId = state[0];
-            var redirectUri = state[1];
-            var callbackUri = $"{httpcontext.Request.Scheme}://{httpcontext.Request.Host}{httpcontext.Request.Path}";
 
+            
+           
+
+
+            var user = await _options.Value.FindIdentityAsync(request, jwtSecurityToken.Claims);
+            
+
+
+           var identity = new ClaimsIdentity(new[]
+            {
+               
+                new Claim(IdentityModel.JwtClaimTypes.Subject, user.ToString()),
+            }, "MicrosoftEntraId");
+
+            return new ClaimsPrincipal(identity);
+
+
+        }
+
+        public override async Task PopulateCallbackRequest(OnCallbackRequest request)
+        {
+            var m = new IdentityModel.Client.AuthorizeResponse(await new StreamReader(request.HttpContext.Request.Body).ReadToEndAsync());
+
+            var query = QueryHelpers.ParseNullableQuery(m.State);
+
+            if (query.TryGetValue("token", out var handleid))
+            {
+                request.HandleId = new Guid(handleid);
+            }
+            request.Props.Add("code", m.Code);
+            request.Props.Add("state", m.State);
+
+             
+        }
+        public override async Task<OnCallBackResult> OnCallback(OnCallbackRequest callbackRequest)
+        {
+            var httpcontext= callbackRequest.HttpContext; 
+             
+             
+            
             var http = _clientFactory.CreateClient();
             var response = await http.RequestAuthorizationCodeTokenAsync(new AuthorizationCodeTokenRequest
             {
                 Address = _options.Value.GetMicrosoftTokenEndpoint(httpcontext),
                 ClientId = _options.Value.ClientId,
                 ClientSecret = _options.Value.ClientSecret,
-                Code = m.Code,
-                RedirectUri = callbackUri,
+                Code = callbackRequest.Props["code"],
+                RedirectUri = callbackRequest.Props["state"],
             });
 
-            ClaimsPrincipal identity = await _options.Value.ValidateUserAsync(httpcontext, handleId, response);
+            var handler = new JsonWebTokenHandler();
+
+            var jwtSecurityToken = handler.ReadJsonWebToken(response.IdentityToken);
+
+
+            ClaimsPrincipal identity = await ValidateMicrosoftEntraIdUser(callbackRequest, callbackRequest.HandleId, jwtSecurityToken);
+           
             if (identity == null)
             {
-                httpcontext.Response.Redirect($"{httpcontext.Request.Scheme}://{httpcontext.Request.Host}callback?error=access_denied&error_subcode=user_not_found");
-                //return;
+                return new OnCallBackResult { ErrorCode = "access_denied", ErrorSubCode = "user_validation_failed", ErrorMessage = "User could not be validated", Success = false };
+             
             }
 
-            var handler = new JwtSecurityTokenHandler();
-            var jwtSecurityToken = handler.ReadJwtToken(response.IdentityToken);
-
-            // Get string of group claims from the token
+            
             var groupClaims = jwtSecurityToken.Claims.Where(c => c.Type == "groups");
-            if (!groupClaims.Any())
+
+            if (!string.IsNullOrEmpty(_options.Value.GroupId))
             {
-                httpcontext.Response.Redirect($"{httpcontext.Request.Scheme}://{httpcontext.Request.Host}callback?error=access_denied&error_subcode=group_not_found");
-                //return;
+
+                if (!groupClaims.Any(x=>x.Value == _options.Value.GroupId))
+                {
+                     return new OnCallBackResult { ErrorCode = "access_denied", ErrorSubCode = "user_access_group_missing", ErrorMessage = "User does not have access", Success = false };
+
+                }
             }
-            // Get the group ids from the claims
+             
             var groupIds = groupClaims.Select(c => new Guid(c.Value)).ToList();
             var db = httpcontext.RequestServices.GetRequiredService<EAVDBContext<DynamicContext>>();
 
             await SyncUserGroup(identity, groupIds, db);
 
-            return (identity, redirectUri, handleId);
+            return new OnCallBackResult { Principal = identity, Success = true };
         }
 
         private async Task SyncUserGroup(ClaimsPrincipal identity, List<Guid> groupIds, EAVDBContext<DynamicContext> db)
         {
-            var claimDict = identity.Claims.ToDictionary(c => c.Type, c => c.Value);
-            var userId = new Guid(claimDict["sub"]);
+            var identityId = Guid.Parse(identity.FindFirstValue("sub"));
 
             // Fetch all security group members for user
             var groupMembersQuery = db.Set<TSecurityGroupMember>()
-                .Where(sgm => sgm.IdentityId == userId);
+                .Where(sgm => sgm.IdentityId == identityId);
             // Fetch in memory
             var groupMembersDict = await groupMembersQuery.ToDictionaryAsync(sgm => sgm.Id);
 
@@ -134,7 +191,7 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
                 if (!sgmGroupSpecific.Any(sgm => sgm.SecurityGroupId == sg.Id))
                 {
                     var sgm = new TSecurityGroupMember();
-                    sgm.IdentityId = userId;
+                    sgm.IdentityId = identityId;
                     sgm.SecurityGroupId = sg.Id;
                     db.Add(sgm);
 
