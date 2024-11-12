@@ -55,6 +55,7 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
             return $"https://login.microsoftonline.com/{options.Value.TenantId}/oauth2/v2.0/token";
         }
 
-        
+        public Dictionary<string,string> AccessGroups { get; set; } = new Dictionary<string, string>();
+
     }
 }

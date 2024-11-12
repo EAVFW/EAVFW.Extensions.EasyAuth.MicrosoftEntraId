@@ -31,7 +31,7 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
             Func<HttpContext, string> getMicrosoftAuthorizationUrl , Func<HttpContext, string> getMicrosoftTokenEndpoint)
             where TContext : DynamicContext
             where TIdentity: DynamicEntity,IIdentity
-            where TSecurityGroup : DynamicEntity, IEntraIDSecurityGroup
+            where TSecurityGroup : DynamicEntity, IEntraIDSecurityGroup,new()
             where TSecurityGroupMemeber : DynamicEntity, ISecurityGroupMember, new()
         {
             builder.AddAuthenticationProvider<MicrosoftEntraEasyAuthProvider<TContext,TSecurityGroup,TSecurityGroupMemeber,TIdentity>,
@@ -53,7 +53,7 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
            Func<OnCallbackRequest, IEnumerable<Claim>, Task<Guid>> findIdentityAsync)
               where TContext : DynamicContext
             where TIdentity : DynamicEntity, IIdentity
-           where TSecurityGroup : DynamicEntity, IEntraIDSecurityGroup
+           where TSecurityGroup : DynamicEntity, IEntraIDSecurityGroup,new()
            where TSecurityGroupMemeber : DynamicEntity, ISecurityGroupMember,new()
         {
             builder.AddAuthenticationProvider<MicrosoftEntraEasyAuthProvider<TContext,TSecurityGroup, TSecurityGroupMemeber, TIdentity>, MicrosoftEntraIdEasyAuthOptions, IConfiguration>((options, config) =>

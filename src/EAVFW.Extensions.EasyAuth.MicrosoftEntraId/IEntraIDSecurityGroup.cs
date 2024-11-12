@@ -9,6 +9,7 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
     public interface IEntraIDSecurityGroup
     {
         public Guid Id { get; set; }
+        public string Name { get; set; }
         public Guid? EntraIdGroupId { get; set; }
     }
 }

@@ -17,6 +17,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Security.AccessControl;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using static IdentityModel.OidcConstants;
@@ -26,11 +27,12 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
 
     public class MicrosoftEntraEasyAuthProvider<TContext,TSecurityGroup, TSecurityGroupMember,TIdentity> : DefaultAuthProvider
         where TContext : DynamicContext
-        where TSecurityGroup : DynamicEntity, IEntraIDSecurityGroup
+        where TSecurityGroup : DynamicEntity, IEntraIDSecurityGroup,new()
         where TSecurityGroupMember : DynamicEntity, ISecurityGroupMember, new()
         where TIdentity : DynamicEntity, IIdentity
     {
         private readonly IOptions<MicrosoftEntraIdEasyAuthOptions> _options;
+        private readonly IOptions<EAVFrameworkOptions> _frameworkOptions;
         private readonly IHttpClientFactory _clientFactory;
           
 
@@ -38,9 +40,11 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
 
         public MicrosoftEntraEasyAuthProvider(
             IOptions<MicrosoftEntraIdEasyAuthOptions> options,
+            IOptions<EAVFrameworkOptions> frameworkOptions,
             IHttpClientFactory clientFactory) : this()
         {
             _options = options ?? throw new System.ArgumentNullException(nameof(options));
+            _frameworkOptions = frameworkOptions;
             _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
         }
 
@@ -169,11 +173,16 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
             // Fetch in memory
             var groupMembersDict = await groupMembersQuery.ToDictionaryAsync(sgm => sgm.Id);
 
+            await EnsureAccessGroupsCreated(db);
+
+
             // Fetch all security groups
             var groupsDict = await db.Set<TSecurityGroup>()
                 .Where(sg => groupMembersQuery.Any(sgm => sgm.SecurityGroupId == sg.Id) ||
                                          (sg.EntraIdGroupId != null && groupIds.Contains(sg.EntraIdGroupId.Value)))
                 .ToDictionaryAsync(sg => sg.Id);
+
+
 
 
             // Fetch specific security group and group members
@@ -197,7 +206,7 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
 
             // Fecth expired group members by comparing the "historical" group members with that of the current based on the group ids
             var expiredGroupMembers = groupMembersDict.Values.Where(sgm =>
-                                                !sgmGroupSpecific.Any(x => x.Id == sgm.Id) &&   
+                                                !sgmGroupSpecific.Any(x => x.Id == sgm.Id) &&
                                                 sgm.SecurityGroupId != null &&
                                                 groupsDict[(Guid) sgm.SecurityGroupId].EntraIdGroupId != null); // Groups of higher aurthority has no EntraGroupId and should not be removed
             foreach (var sgm in expiredGroupMembers)
@@ -207,6 +216,28 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
             }
 
             if (isDirty) await db.SaveChangesAsync(identity);
+        }
+
+        private async Task EnsureAccessGroupsCreated(EAVDBContext<DynamicContext> db)
+        {
+            var groups = _options.Value.AccessGroups.Where(kv => !string.IsNullOrEmpty(kv.Value)).Select(c => c.Key).ToArray();
+            var existingGrouos = await db.Set<TSecurityGroup>().Where(g => groups.Contains(g.Name)).ToListAsync();
+            var missingGroups = groups.Except(existingGrouos.Select(g => g.Name)).ToArray();
+            foreach (var missingGroup in missingGroups)
+            {
+                var group = new TSecurityGroup();
+                group.Name = missingGroup;
+                group.EntraIdGroupId = Guid.Parse(_options.Value.AccessGroups[missingGroup]);
+                db.Add(group);
+
+                existingGrouos.Add(group);
+            }
+            foreach (var group in existingGrouos)
+            {
+                if (!group.EntraIdGroupId.HasValue)
+                    group.EntraIdGroupId = Guid.Parse(_options.Value.AccessGroups[group.Name]);
+            }
+            await db.SaveChangesAsync(_frameworkOptions.Value.SystemAdministratorIdentity);
         }
 
         public RequestDelegate OnSignedOut()
