@@ -9,6 +9,7 @@ using IdentityModel.Client;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -211,7 +212,8 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
                                                 groupsDict[(Guid) sgm.SecurityGroupId].EntraIdGroupId != null); // Groups of higher aurthority has no EntraGroupId and should not be removed
             foreach (var sgm in expiredGroupMembers)
             {
-                db.Remove(sgm);
+                db.Entry(sgm).State = EntityState.Deleted;
+              //  db.Remove(sgm);
                 isDirty = true;
             }
 
