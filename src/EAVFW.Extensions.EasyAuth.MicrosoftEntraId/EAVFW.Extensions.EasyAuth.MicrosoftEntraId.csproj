@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net6.0;net8.0</TargetFrameworks>
+      <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
 
     <Title>EAVFW.Extensions.EasyAuth.MicrosoftEntraId</Title>
     <Authors>Poul Kjeldager</Authors>
@@ -18,7 +18,7 @@
     </ItemGroup>
     <ItemGroup Condition="$(UseEAVFromNuget) != 'false'">
         <PackageReference Include="EAVFramework" Version="$(EAVFrameworkVersion)" />
-        <PackageReference Include="EAVFW.Extensions.SecurityModel" Version="2.2.0" />
+        <PackageReference Include="EAVFW.Extensions.SecurityModel" Version="3.0.0" />
     </ItemGroup>
 
   <ItemGroup>
@@ -29,6 +29,6 @@
 
     <PackageReference Include="IdentityModel" Version="7.0.0" />
 
-    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.0.1" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.2.0" />
   </ItemGroup>
 </Project>

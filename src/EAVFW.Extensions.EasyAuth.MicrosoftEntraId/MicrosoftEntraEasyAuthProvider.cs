@@ -242,19 +242,6 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
             await db.SaveChangesAsync(_frameworkOptions.Value.SystemAdministratorIdentity);
         }
 
-        public RequestDelegate OnSignedOut()
-        {
-            throw new System.NotImplementedException();
-        }
-
-        public RequestDelegate OnSignout(string callbackUrl)
-        {
-            throw new System.NotImplementedException();
-        }
-
-        public RequestDelegate OnSingleSignOut(string callbackUrl)
-        {
-            throw new System.NotImplementedException();
-        }
+        
     }
 }
