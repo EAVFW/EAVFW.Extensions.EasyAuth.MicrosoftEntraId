@@ -33,6 +33,8 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
         /// </summary>
         public string GroupId { get;  set; }
 
+        public bool LogTokenResponse { get; set; } = false;
+
 
         public string Scope { get; set; } = "openid email profile";
 

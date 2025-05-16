@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using System;
@@ -34,6 +35,7 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
     {
         private readonly IOptions<MicrosoftEntraIdEasyAuthOptions> _options;
         private readonly IOptions<EAVFrameworkOptions> _frameworkOptions;
+        private readonly ILogger<MicrosoftEntraEasyAuthProvider<TContext, TSecurityGroup, TSecurityGroupMember, TIdentity>> _logger;
         private readonly IHttpClientFactory _clientFactory;
           
 
@@ -42,10 +44,12 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
         public MicrosoftEntraEasyAuthProvider(
             IOptions<MicrosoftEntraIdEasyAuthOptions> options,
             IOptions<EAVFrameworkOptions> frameworkOptions,
+            ILogger<MicrosoftEntraEasyAuthProvider<TContext, TSecurityGroup, TSecurityGroupMember, TIdentity>> logger,
             IHttpClientFactory clientFactory) : this()
         {
             _options = options ?? throw new System.ArgumentNullException(nameof(options));
             _frameworkOptions = frameworkOptions;
+            _logger = logger;
             _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
         }
 
@@ -116,6 +120,7 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
         }
         public override async Task<OnCallBackResult> OnCallback(OnCallbackRequest callbackRequest)
         {
+            _logger.LogDebug("OnCallback called with {0}", callbackRequest.HandleId);
             var httpcontext= callbackRequest.HttpContext; 
              
              
@@ -143,7 +148,11 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
              
             }
 
-            
+            if (_options.Value.LogTokenResponse)
+            {
+                _logger.LogInformation("User {0} authenticated: {1}", identity.FindFirstValue("sub"), response.Raw);
+            }
+
             var groupClaims = jwtSecurityToken.Claims.Where(c => c.Type == "groups");
 
             if (!string.IsNullOrEmpty(_options.Value.GroupId))
