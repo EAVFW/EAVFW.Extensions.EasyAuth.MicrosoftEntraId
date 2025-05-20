@@ -35,7 +35,7 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
     {
         private readonly IOptions<MicrosoftEntraIdEasyAuthOptions> _options;
         private readonly IOptions<EAVFrameworkOptions> _frameworkOptions;
-        private readonly ILogger<MicrosoftEntraEasyAuthProvider<TContext, TSecurityGroup, TSecurityGroupMember, TIdentity>> _logger;
+        private readonly ILogger _logger;
         private readonly IHttpClientFactory _clientFactory;
           
 
@@ -44,12 +44,12 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
         public MicrosoftEntraEasyAuthProvider(
             IOptions<MicrosoftEntraIdEasyAuthOptions> options,
             IOptions<EAVFrameworkOptions> frameworkOptions,
-            ILogger<MicrosoftEntraEasyAuthProvider<TContext, TSecurityGroup, TSecurityGroupMember, TIdentity>> logger,
+            ILoggerFactory loggerFactory,
             IHttpClientFactory clientFactory) : this()
         {
             _options = options ?? throw new System.ArgumentNullException(nameof(options));
             _frameworkOptions = frameworkOptions;
-            _logger = logger;
+            _logger = loggerFactory.CreateLogger("MicrosoftEntraEasyAuthProvider");
             _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
         }
 
@@ -139,6 +139,12 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
 
             var jwtSecurityToken = handler.ReadJsonWebToken(response.IdentityToken);
 
+            // Log JWT token structure
+            _logger.LogDebug("JWT token parsed. Claims count: {0}", jwtSecurityToken.Claims.Count());
+            foreach (var claim in jwtSecurityToken.Claims)
+            {
+                _logger.LogTrace("JWT token claim: {0} = {1}", claim.Type, claim.Value);
+            }
 
             ClaimsPrincipal identity = await ValidateMicrosoftEntraIdUser(callbackRequest, callbackRequest.HandleId, jwtSecurityToken);
            
@@ -153,15 +159,20 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
                 _logger.LogInformation("User {0} authenticated: {1}", identity.FindFirstValue("sub"), response.Raw);
             }
 
-            var groupClaims = jwtSecurityToken.Claims.Where(c => c.Type == "groups");
+            var groupClaims = jwtSecurityToken.Claims.Where(c => c.Type == "groups").ToList();
+            _logger.LogInformation("Found {0} group claims for user {1}", groupClaims.Count, identity.FindFirstValue("sub"));
+            
+            foreach (var groupClaim in groupClaims)
+            {
+                _logger.LogDebug("User has group: {0}", groupClaim.Value);
+            }
 
             if (!string.IsNullOrEmpty(_options.Value.GroupId))
             {
-
+                _logger.LogDebug("Checking if user is in required group {0}", _options.Value.GroupId);
                 if (!groupClaims.Any(x=>x.Value == _options.Value.GroupId))
                 {
                      return new OnCallBackResult { ErrorCode = "access_denied", ErrorSubCode = "user_access_group_missing", ErrorMessage = "User does not have access", Success = false };
-
                 }
             }
              
@@ -176,28 +187,52 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
         private async Task SyncUserGroup(ClaimsPrincipal identity, List<Guid> groupIds, EAVDBContext<DynamicContext> db)
         {
             var identityId = Guid.Parse(identity.FindFirstValue("sub"));
+            _logger.LogDebug("Starting SyncUserGroup for user {0} with {1} groups", identityId, groupIds.Count);
+            
+            // Log the groups the user is in
+            foreach (var groupId in groupIds)
+            {
+                _logger.LogDebug("User has Entra ID group: {0}", groupId);
+            }
 
             // Fetch all security group members for user
             var groupMembersQuery = db.Set<TSecurityGroupMember>()
                 .Where(sgm => sgm.IdentityId == identityId);
             // Fetch in memory
             var groupMembersDict = await groupMembersQuery.ToDictionaryAsync(sgm => sgm.Id);
+            _logger.LogDebug("Found {0} existing security group memberships for user", groupMembersDict.Count);
 
             await EnsureAccessGroupsCreated(db);
 
-
             // Fetch all security groups
-            var groupsDict = await db.Set<TSecurityGroup>()
+            var groupsQuery = db.Set<TSecurityGroup>()
                 .Where(sg => groupMembersQuery.Any(sgm => sgm.SecurityGroupId == sg.Id) ||
-                                         (sg.EntraIdGroupId != null && groupIds.Contains(sg.EntraIdGroupId.Value)))
-                .ToDictionaryAsync(sg => sg.Id);
+                             (sg.EntraIdGroupId != null && groupIds.Contains(sg.EntraIdGroupId.Value)));
+            
+            _logger.LogDebug("Querying security groups with SQL: {0}", groupsQuery.ToQueryString());
+            
+            var groupsDict = await groupsQuery.ToDictionaryAsync(sg => sg.Id);
+            _logger.LogDebug("Found {0} relevant security groups", groupsDict.Count);
 
-
-
+            // Log the groups fetched
+            foreach (var group in groupsDict.Values)
+            {
+                _logger.LogDebug("Security group: {0}, Name: {1}, EntraIdGroupId: {2}", 
+                    group.Id, group.Name, group.EntraIdGroupId);
+            }
 
             // Fetch specific security group and group members
-            var sgGroupSpecific = groupsDict.Values.Where(sg => sg.EntraIdGroupId != null && groupIds.Contains(sg.EntraIdGroupId.Value)).ToDictionary(sg => sg.Id);
-            var sgmGroupSpecific = groupMembersDict.Values.Where(sgm => sgm.SecurityGroupId != null && sgGroupSpecific.ContainsKey((Guid) sgm.SecurityGroupId));
+            var sgGroupSpecific = groupsDict.Values
+                .Where(sg => sg.EntraIdGroupId != null && groupIds.Contains(sg.EntraIdGroupId.Value))
+                .ToDictionary(sg => sg.Id);
+            
+            _logger.LogDebug("Found {0} matching security groups with EntraId", sgGroupSpecific.Count);
+
+            var sgmGroupSpecific = groupMembersDict.Values
+                .Where(sgm => sgm.SecurityGroupId != null && sgGroupSpecific.ContainsKey((Guid)sgm.SecurityGroupId))
+                .ToList();
+            
+            _logger.LogDebug("User is already a member of {0} matching security groups", sgmGroupSpecific.Count);
 
             // Check if member group exists else add it
             bool isDirty = false;
@@ -205,6 +240,9 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
             {
                 if (!sgmGroupSpecific.Any(sgm => sgm.SecurityGroupId == sg.Id))
                 {
+                    _logger.LogDebug("Adding user to security group: {0}, Name: {1}, EntraIdGroupId: {2}", 
+                        sg.Id, sg.Name, sg.EntraIdGroupId);
+                    
                     var sgm = new TSecurityGroupMember();
                     sgm.IdentityId = identityId;
                     sgm.SecurityGroupId = sg.Id;
@@ -214,41 +252,85 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
                 }
             }
 
-            // Fecth expired group members by comparing the "historical" group members with that of the current based on the group ids
+            // Fetch expired group members by comparing the "historical" group members with that of the current based on the group ids
             var expiredGroupMembers = groupMembersDict.Values.Where(sgm =>
-                                                !sgmGroupSpecific.Any(x => x.Id == sgm.Id) &&
-                                                sgm.SecurityGroupId != null &&
-                                                groupsDict[(Guid) sgm.SecurityGroupId].EntraIdGroupId != null); // Groups of higher aurthority has no EntraGroupId and should not be removed
+                                            !sgmGroupSpecific.Any(x => x.Id == sgm.Id) &&
+                                            sgm.SecurityGroupId != null &&
+                                            groupsDict.ContainsKey((Guid)sgm.SecurityGroupId) && 
+                                            groupsDict[(Guid)sgm.SecurityGroupId].EntraIdGroupId != null)
+                                     .ToList();
+            
+            _logger.LogDebug("Found {0} expired group memberships to remove", expiredGroupMembers.Count);
+            
             foreach (var sgm in expiredGroupMembers)
             {
+                var sg = groupsDict[(Guid)sgm.SecurityGroupId];
+                _logger.LogDebug("Removing user from security group: {0}, Name: {1}, EntraIdGroupId: {2}", 
+                    sg.Id, sg.Name, sg.EntraIdGroupId);
+                
                 db.Entry(sgm).State = EntityState.Deleted;
-              //  db.Remove(sgm);
                 isDirty = true;
             }
 
-            if (isDirty) await db.SaveChangesAsync(identity);
+            if (isDirty)
+            {
+                _logger.LogDebug("Changes detected, saving changes to database");
+                await db.SaveChangesAsync(identity);
+            }
+            else
+            {
+                _logger.LogDebug("No changes to user group memberships needed");
+            }
         }
 
         private async Task EnsureAccessGroupsCreated(EAVDBContext<DynamicContext> db)
         {
-            var groups = _options.Value.AccessGroups.Where(kv => !string.IsNullOrEmpty(kv.Value)).Select(c => c.Key).ToArray();
-            var existingGrouos = await db.Set<TSecurityGroup>().Where(g => groups.Contains(g.Name)).ToListAsync();
-            var missingGroups = groups.Except(existingGrouos.Select(g => g.Name)).ToArray();
+            _logger.LogDebug("Ensuring access groups are created. Configured groups: {0}", 
+                _options.Value.AccessGroups.Count(kv => !string.IsNullOrEmpty(kv.Value)));
+                
+            var groups = _options.Value.AccessGroups
+                .Where(kv => !string.IsNullOrEmpty(kv.Value))
+                .Select(c => c.Key)
+                .ToArray();
+                
+            var existingGroups = await db.Set<TSecurityGroup>()
+                .Where(g => groups.Contains(g.Name))
+                .ToListAsync();
+                
+            _logger.LogDebug("Found {0} existing groups out of {1} configured", 
+                existingGroups.Count, groups.Length);
+                
+            var missingGroups = groups.Except(existingGroups.Select(g => g.Name)).ToArray();
+            
             foreach (var missingGroup in missingGroups)
             {
+                _logger.LogDebug("Creating missing security group: {0} with EntraId: {1}", 
+                    missingGroup, _options.Value.AccessGroups[missingGroup]);
+                    
                 var group = new TSecurityGroup();
                 group.Name = missingGroup;
                 group.EntraIdGroupId = Guid.Parse(_options.Value.AccessGroups[missingGroup]);
                 db.Add(group);
 
-                existingGrouos.Add(group);
+                existingGroups.Add(group);
             }
-            foreach (var group in existingGrouos)
+            
+            foreach (var group in existingGroups)
             {
                 if (!group.EntraIdGroupId.HasValue)
+                {
+                    _logger.LogDebug("Updating existing security group: {0} with EntraId: {1}", 
+                        group.Name, _options.Value.AccessGroups[group.Name]);
+                        
                     group.EntraIdGroupId = Guid.Parse(_options.Value.AccessGroups[group.Name]);
+                }
             }
-            await db.SaveChangesAsync(_frameworkOptions.Value.SystemAdministratorIdentity);
+            
+            if (missingGroups.Length > 0 || existingGroups.Any(g => !g.EntraIdGroupId.HasValue))
+            {
+                _logger.LogDebug("Saving security group changes");
+                await db.SaveChangesAsync(_frameworkOptions.Value.SystemAdministratorIdentity);
+            }
         }
 
         
