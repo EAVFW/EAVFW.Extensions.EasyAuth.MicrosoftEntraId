@@ -275,7 +275,7 @@ namespace EAVFW.Extensions.EasyAuth.MicrosoftEntraId
             if (isDirty)
             {
                 _logger.LogDebug("Changes detected, saving changes to database");
-                var result=  await db.SaveChangesAsync(identity);
+                var result=  await db.SaveChangesAsync(_frameworkOptions.Value.SystemAdministratorIdentity);
                 if (result?.Errors.Any() ?? false)
                 {
                     _logger.LogError("Error saving group membership changes: {0}", string.Join(", ", result.Errors.Select(e => e.Error)));
